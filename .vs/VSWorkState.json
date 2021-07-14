@@ -1,0 +1,12 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\core",
+    "\\core\\__pycache__",
+    "\\data",
+    "\\pruned_models",
+    "\\saved_models"
+  ],
+  "SelectedNode": "\\core\\data_processor.py",
+  "PreviewInSolutionExplorer": false
+}
