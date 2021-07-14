@@ -1,0 +1,151 @@
+import math
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import MinMaxScaler
+import itertools
+
+class DataLoader():
+    """A class for loading and transforming data for the lstm model"""
+
+    def __init__(self, filename, split, cols):
+        dataframe = pd.read_csv(filename)
+        i_split = int(len(dataframe) * split)
+        self.data_train = dataframe.get(cols).values[:i_split]
+        self.data_test  = dataframe.get(cols).values[i_split:]
+        self.len_train  = len(self.data_train)
+        self.len_test   = len(self.data_test)
+        self.len_train_windows = None
+
+    def get_test_data(self, seq_len, normalise):
+        '''
+        Create x, y test data windows
+        Warning: batch method, not generative, make sure you have enough memory to
+        load data, otherwise reduce size of the training split.
+        '''
+        data_windows = []
+        for i in range(self.len_test - seq_len):
+            data_windows.append(self.data_test[i:i+seq_len])
+
+        data_windows = np.array(data_windows).astype(float)
+        data_windows = self.normalise_windows(data_windows, single_window=False) if normalise else data_windows
+
+        x = data_windows[:, :-1]
+        y = data_windows[:, -1, [0]]
+        return x,y
+
+    def get_train_data(self, seq_len, normalise):
+        '''
+        Create x, y train data windows
+        Warning: batch method, not generative, make sure you have enough memory to
+        load data, otherwise use generate_training_window() method.
+        '''
+        data_x = []
+        data_y = []
+        for i in range(self.len_train - seq_len):
+            x, y = self._next_window(i, seq_len, normalise)
+            data_x.append(x)
+            data_y.append(y)
+        return np.array(data_x), np.array(data_y)
+
+    def generate_train_batch(self, seq_len, batch_size, normalise):
+        '''Yield a generator of training data from filename on given list of cols split for train/test'''
+        i = 0
+        while i < (self.len_train - seq_len):
+            x_batch = []
+            y_batch = []
+            for b in range(batch_size):
+                if i >= (self.len_train - seq_len):
+                    # stop-condition for a smaller final batch if data doesn't divide evenly
+                    yield np.array(x_batch), np.array(y_batch)
+                    i = 0
+                x, y = self._next_window(i, seq_len, normalise)
+                x_batch.append(x)
+                y_batch.append(y)
+                i += 1
+            yield np.array(x_batch), np.array(y_batch)
+
+    def _next_window(self, i, seq_len, normalise):
+        '''Generates the next data window from the given index location i'''
+        window = self.data_train[i:i+seq_len]
+        window = self.normalise_windows(window, single_window=True)[0] if normalise else window
+        x = window[:-1]
+        y = window[-1, [0]]
+        return x, y
+
+    def normalise_windows(self, window_data, single_window=False):
+        '''Normalise window with a base value of zero'''
+        
+        normalised_data = []
+        scaler=MinMaxScaler()
+        window_data = [window_data] if single_window else window_data
+        for window in window_data:
+            normalised_window = []
+            for col_i in range(window.shape[1]):
+                try:
+                    #normalised_col = [((float(p) / float(window[0, col_i])) - 1) for p in window[:, col_i]]
+                    #print(normalised_col)
+                    #print(type(normalised_col))
+                    
+                    temp=[]
+                    for p in window[:,col_i]:
+                        temp.append(p)
+                    temp=pd.DataFrame(temp,columns=['col'])
+                    temp=scaler.fit_transform(temp)
+                    normalised_col  = temp.tolist()
+                    normalised_col=list(itertools.chain.from_iterable(normalised_col))
+                    for item in normalised_col:
+                        item=float(item)
+                    #print(normalised_col)
+                    #print(type(normalised_col2))
+                    #print("heheheh")
+                   
+                except ZeroDivisionError:
+                    normalised_col = [((float(p) / (float(window[0, col_i])+0.01)) - 1) for p in window[:, col_i]]
+                  
+                   
+                normalised_window.append(normalised_col)
+            normalised_window = np.array(normalised_window).T # reshape and transpose array back into original multidimensional format
+            normalised_data.append(normalised_window)
+        return np.array(normalised_data)
+    def normalize_dataset(self, filename):
+        '''Normalize the entire dataset, instead of doing it window by window'''
+        df = pd.read_csv(file,low_memory=False)
+        for col in df:
+            try:
+                df[col]=df[col].to_numpy(dtype=np.float64)
+                largestvalue=df[col].max()
+                df[col]=df[col]/largestvalue
+            except ZeroDivisionError:
+                #if the largest value in a column is 0, then there is no point to waste computing power
+                print(col)
+                df=df.drop(columns=col)
+            except ValueError:
+                #support for learning with data that are not numbers is not yet supported"
+                print(col)
+                df=df.drop(columns=col)
+        df.to_csv(filename)
+
+ 
+def dataset_joiner(path,desired_filename):
+    '''
+    For joining together several files in the dataset into one larger file, if the dataset is spread out over several files
+    Files must not be in the data folder in this project
+    '''
+    illegal_path=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))+r'data\''
+    if path==illegal_path:
+        print("Please put the files you want to join in another folder to avoid messy results")
+        return
+    count=0
+    for file in os.listdir(path):
+        if count==0:
+            temp=path+file
+            bigdf=pd.read_csv(temp,low_memory=False)
+        else:
+            temp=path+file
+            df=pd.read_csv(temp,low_memory=False)
+            bigdf.append(df)
+        count+=1
+    save=illegal_path+desired_filename+'.csv'
+    bigdf.to_csv(save)
+    print("Joined")
+    
