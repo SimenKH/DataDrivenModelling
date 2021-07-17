@@ -1,3 +1,10 @@
 This is the code for the pure Deep FeedForward Neural Network
 
-The main 
+To use the code, call the main function with all the neccessary inputs.
+
+To change optimizer-function, change the two lines
+
+criterion = torch.nn.MSELoss(reduction='sum')
+optimizer = torch.optim.Adam(net.parameters(), lr=lr)
+
+in the def train function
