@@ -1,16 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Created on Wed Nov 18 15:38:53 2020
+Created on Thu Mar 25 15:37:33 2021
 
 @author: simen
 """
 
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Sep 30 11:15:37 2020
-@author: simen
-base code taken from https://github.com/bgrimstad/TTK28-Courseware/blob/master/model/flow_model.ipynb
-"""
+
 import matplotlib.pyplot as plt
 import pandas as pd
 import torch
@@ -20,23 +15,23 @@ import sys
 import xlsxwriter
 import numpy as np
 import GPUtil as GPU
+import math
 from threading import Thread
 import time
-import math
-class Monitor(Thread):
-    def __init__(self, delay):
-        super(Monitor, self).__init__()
-        self.stopped = False
-        self.delay = delay # Time between calls to GPUtil
-        self.start()
+# class Monitor(Thread):
+#     def __init__(self, delay):
+#         super(Monitor, self).__init__()
+#         self.stopped = False
+#         self.delay = delay # Time between calls to GPUtil
+#         self.start()
 
-    def run(self):
-        while not self.stopped:
-            GPU.showUtilization()
-            time.sleep(self.delay)
+#     def run(self):
+#         while not self.stopped:
+#             GPU.showUtilization()
+#             time.sleep(self.delay)
 
-    def stop(self):
-        self.stopped = True
+#     def stop(self):
+#         self.stopped = True
 class Net(torch.nn.Module):
     """
     PyTorch offers several ways to construct neural networks.
@@ -135,7 +130,7 @@ def train(
 
     # Define loss and optimizer
     criterion = torch.nn.MSELoss(reduction='sum')
-    optimizer = torch.optim.Adagrad(net.parameters(), lr=lr, lr_decay=0.001*lr*(1/n_epochs))
+    optimizer = torch.optim.Adam(net.parameters(), lr=lr)#, lr_decay=0.001*lr*(1/n_epochs))
 
     # Train Network
     for epoch in range(n_epochs):
@@ -172,28 +167,26 @@ def train(
         
     return net
 
-def main():
+def main(hidden_layers,epochs,learning_rate,result_filename,console_log_filename,time_spent_filename,output,inputset):
     
-    old=sys.stdout
-    sys.stdout=open('console-log5.txt','w')
-    monitor = Monitor(5)
+ 
+    # monitor = Monitor(5)
     GPUs = GPU.getGPUs()
     gpu = GPUs[0]
     t0=time.time()
     
     
-    random_seed =13371337  # This seed is also used in the pandas sample() method below
+    random_seed =13371337 
+    randSeed2=12369784
+    # This seed is also used in the pandas sample() method below
     torch.manual_seed(random_seed)
-    df_unfixed = pd.read_csv(r"C:\Users\simen\OneDrive\Skrivebord\Prosjektoppgave\Test2.csv", index_col=0)
-    for col in df_unfixed:
-        df_unfixed[col] = pd.to_numeric(df_unfixed[col], errors='coerce')
-        
-    df=df_unfixed.interpolate(method='linear',limit_direction='forward')
-    df=df.dropna(axis=0)
-    print("Data finished interpolating")
+    df = pd.read_csv(r"C:\Users\simen\OneDrive\Skrivebord\MasterOppgave\Engine\SeptDec2020-ver3.csv", dtype=np.float64)
+    for col in df:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+
     print('Sizze of dataset', df.shape)
     # Test set (this is the period for which we must estimate QTOT)
-    test_set = df.iloc[838860:1048570]
+    test_set =df.sample(frac=0.1, replace=False, random_state=randSeed2)
 
     # Make a copy of the dataset and remove the test data
     train_val_set = df.copy().drop(test_set.index)
@@ -207,8 +200,8 @@ def main():
     # Check that the numbers add up
     n_points = len(train_set) + len(val_set) + len(test_set)
     print(f'{len(df)} = {len(train_set)} + {len(val_set)} + {len(test_set)} = {n_points}')
-    INPUT_COLS = [	'Africa.571_TT_124',	'Africa.871_CB_TR1_KW','Africa.571_TT_114']	#'Africa.571_TT_114','Africa.871_XI_10151',	'Africa.871_XI_10207','Africa.871_XI_10259','Africa.871_XI_10302','Africa.871_XI_10303','Africa.871_XI_10304','Africa.871_XI_10306','Africa.871_XI_10312','Africa.871_XI_10315','Africa.871_XI_10363','Africa.871_XI_10409']
-    OUTPUT_COLS = ['Africa.404_XI_11016']
+    INPUT_COLS = inputset	#'Africa.571_TT_114','Africa.871_XI_10151',	'Africa.871_XI_10207','Africa.871_XI_10259','Africa.871_XI_10302','Africa.871_XI_10303','Africa.871_XI_10304','Africa.871_XI_10306','Africa.871_XI_10312','Africa.871_XI_10315','Africa.871_XI_10363','Africa.871_XI_10409']
+    OUTPUT_COLS = output
     
     # Get input and output tensors and convert them to torch tensors
     x_train = torch.from_numpy(train_set[INPUT_COLS].values).to(torch.float)
@@ -220,57 +213,58 @@ def main():
     # Create dataset loaders
     # Here we specify the batch size and if the data should be shuffled
     train_dataset = torch.utils.data.TensorDataset(x_train, y_train)
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=131072, shuffle=True)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=8192, shuffle=True)
 
     val_dataset = torch.utils.data.TensorDataset(x_val, y_val)
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=len(val_set), shuffle=False)
     
-    layers = [len(INPUT_COLS), 500,25, len(OUTPUT_COLS)]
+    layers_constructor = [len(INPUT_COLS)]+hidden_layers+[len(OUTPUT_COLS)]
+    layers = layers_constructor
     net = Net(layers)
 
     print(f'Layers: {layers}')
     print(f'Number of model parameters: {net.get_num_parameters()}')
     
-    n_epochs = 12000
-    lr = 0.7
-    l2_reg =  0.015  # 10
+    n_epochs = epochs #orig 12000
+    lr =  1
+    l2_reg =  0.007  # 10
    
     
     MSElist=[]
   
     net = train(net, train_loader, val_loader, n_epochs, lr, l2_reg,MSElist,gpu)
    
-    with open('MSEovertime.txt','w') as f:
-        sys.stdout=f
-        epoke=1
-        for element in MSElist:
-            print('Epoch:',epoke, '     Val MSE: ' ,element, '\n \n')
-            epoke+=1
+    # with open('MSEovertime.txt','w') as f:
+    #     sys.stdout=f
+    #     epoke=1
+    #     for element in MSElist:
+    #         print('Epoch:',epoke, '     Val MSE: ' ,element, '\n \n')
+    #         epoke+=1
         
     
-    workbook = xlsxwriter.Workbook('MSE.xlsx')
+    workbook = xlsxwriter.Workbook(result_filename)
     worksheet = workbook.add_worksheet()
     row=0
     for element in MSElist:
         worksheet.write(row,0,element)
         row+=1
     workbook.close()
-    monitor.stop()
+    # monitor.stop()
     t1=time.time()-t0
-    sys.stdout=open('timespent.txt','w')
+    
     print('Time for entire script to run:', t1)
-    sys.stdout=old
-    # Get input and output as torch tensors
+   
+    #Get input and output as torch tensors
     x_test = torch.from_numpy(test_set[INPUT_COLS].values).to(torch.float)
     
 
     
     y_test = torch.from_numpy(test_set[OUTPUT_COLS].values).to(torch.float)
 
-    # Make prediction
+    Make prediction
     pred_test = net(x_test)
 
-    # Compute MSE, MAE and MAPE on test data
+    Compute MSE, MAE and MAPE on test data
     print('Error on test data')
     
     mse_test = torch.mean(torch.pow(pred_test - y_test, 2))
@@ -281,7 +275,6 @@ def main():
     
     mape_test = 100*torch.mean(torch.abs(torch.div(pred_test - y_test, y_test)))
     print(f'MAPE: {mape_test.item()} %')
-    
     
 def multi_run(mode):
     #constants
