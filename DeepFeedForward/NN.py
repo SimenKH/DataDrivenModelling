@@ -1,11 +1,37 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Mar 25 15:37:33 2021
+Created on Thu Feb 25 13:13:23 2021
 
 @author: simen
 """
 
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Jan  5 14:47:31 2021
 
+@author: simen
+"""
+
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Jan  5 14:46:09 2021
+
+@author: simen
+"""
+
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Nov 18 15:38:53 2020
+
+@author: simen
+"""
+
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Sep 30 11:15:37 2020
+@author: simen
+base code taken from https://github.com/bgrimstad/TTK28-Courseware/blob/master/model/flow_model.ipynb
+"""
 import matplotlib.pyplot as plt
 import pandas as pd
 import torch
@@ -18,6 +44,7 @@ import GPUtil as GPU
 import math
 from threading import Thread
 import time
+import torch_optimizer as experimental
 # class Monitor(Thread):
 #     def __init__(self, delay):
 #         super(Monitor, self).__init__()
@@ -130,7 +157,8 @@ def train(
 
     # Define loss and optimizer
     criterion = torch.nn.MSELoss(reduction='sum')
-    optimizer = torch.optim.Adam(net.parameters(), lr=lr)#, lr_decay=0.001*lr*(1/n_epochs))
+    optimizer = torch.optim.Adagrad (net.parameters(), lr=lr, lr_decay=0.001*lr*(1/n_epochs))
+    #optimizer = experimental.AdaBound(net.parameters(), lr=lr)
 
     # Train Network
     for epoch in range(n_epochs):
@@ -169,16 +197,15 @@ def train(
 
 def main(hidden_layers,epochs,learning_rate,result_filename,console_log_filename,time_spent_filename,output,inputset):
     
- 
+    old=sys.stdout
+    sys.stdout=open(console_log_filename,'w')
     # monitor = Monitor(5)
     GPUs = GPU.getGPUs()
     gpu = GPUs[0]
     t0=time.time()
     
     
-    random_seed =13371337 
-    randSeed2=12369784
-    # This seed is also used in the pandas sample() method below
+    random_seed =13371337  # This seed is also used in the pandas sample() method below
     torch.manual_seed(random_seed)
     df = pd.read_csv(r"C:\Users\simen\OneDrive\Skrivebord\MasterOppgave\Engine\SeptDec2020-ver3.csv", dtype=np.float64)
     for col in df:
@@ -186,7 +213,7 @@ def main(hidden_layers,epochs,learning_rate,result_filename,console_log_filename
 
     print('Sizze of dataset', df.shape)
     # Test set (this is the period for which we must estimate QTOT)
-    test_set =df.sample(frac=0.1, replace=False, random_state=randSeed2)
+    test_set = df.iloc[838860:1048570]
 
     # Make a copy of the dataset and remove the test data
     train_val_set = df.copy().drop(test_set.index)
@@ -226,8 +253,8 @@ def main(hidden_layers,epochs,learning_rate,result_filename,console_log_filename
     print(f'Number of model parameters: {net.get_num_parameters()}')
     
     n_epochs = epochs #orig 12000
-    lr =  1
-    l2_reg =  0.007  # 10
+    lr =  learning_rate
+    l2_reg =  0.05  # 10
    
     
     MSElist=[]
@@ -251,30 +278,30 @@ def main(hidden_layers,epochs,learning_rate,result_filename,console_log_filename
     workbook.close()
     # monitor.stop()
     t1=time.time()-t0
-    
+    sys.stdout=open('timespent.txt','w')
     print('Time for entire script to run:', t1)
-   
-    #Get input and output as torch tensors
-    x_test = torch.from_numpy(test_set[INPUT_COLS].values).to(torch.float)
+    sys.stdout=old
+    # Get input and output as torch tensors
+    #x_test = torch.from_numpy(test_set[INPUT_COLS].values).to(torch.float)
     
 
     
-    y_test = torch.from_numpy(test_set[OUTPUT_COLS].values).to(torch.float)
+    #y_test = torch.from_numpy(test_set[OUTPUT_COLS].values).to(torch.float)
 
-    Make prediction
-    pred_test = net(x_test)
+    # Make prediction
+    #pred_test = net(x_test)
 
-    Compute MSE, MAE and MAPE on test data
-    print('Error on test data')
+    # Compute MSE, MAE and MAPE on test data
+    #print('Error on test data')
     
-    mse_test = torch.mean(torch.pow(pred_test - y_test, 2))
-    print(f'MSE: {mse_test.item()}')
+    #mse_test = torch.mean(torch.pow(pred_test - y_test, 2))
+    #print(f'MSE: {mse_test.item()}')
     
-    mae_test = torch.mean(torch.abs(pred_test - y_test))
-    print(f'MAE: {mae_test.item()}')
+    #mae_test = torch.mean(torch.abs(pred_test - y_test))
+    #print(f'MAE: {mae_test.item()}')
     
-    mape_test = 100*torch.mean(torch.abs(torch.div(pred_test - y_test, y_test)))
-    print(f'MAPE: {mape_test.item()} %')
+    #mape_test = 100*torch.mean(torch.abs(torch.div(pred_test - y_test, y_test)))
+    #print(f'MAPE: {mape_test.item()} %')
     
 def multi_run(mode):
     #constants
@@ -329,15 +356,26 @@ def GrowingApproach():
     #inputs=[['Africa.601_XI_10114'],['Africa.601_XI_10114','Africa.601_UA_10176','Africa.601_TI_10199','Africa.601_TI_10200'],['Africa.601_XI_10114','Africa.601_UA_10176','Africa.601_TI_10199','Africa.601_TI_10200','Africa.601_TI_10179','Africa.601_TI_10179','Africa.601_TI_10178'],['Africa.601_XI_10114','Africa.601_UA_10176','Africa.601_TI_10199','Africa.601_TI_10200','Africa.601_TI_10179','Africa.601_TI_10179','Africa.601_TI_10178','Africa.601_PI_10177','Africa.601_PT_10163'],['Africa.601_XI_10114','Africa.601_UA_10176','Africa.601_TI_10199','Africa.601_TI_10200','Africa.601_TI_10179','Africa.601_TI_10179','Africa.601_TI_10178','Africa.601_PI_10177','Africa.601_PT_10163','Africa.601_PI_10170','601_TI_10172'],['Africa.601_XI_10114','Africa.601_UA_10176','Africa.601_TI_10199','Africa.601_TI_10200','Africa.601_TI_10179','Africa.601_TI_10179','Africa.601_TI_10178','Africa.601_PI_10177','Africa.601_PT_10163','Africa.601_PI_10170','601_TI_10172','Africa.601_TT_10189','Africa.601_TT_10188','Africa.601_TT_10187','Africa.601_TT_10186','Africa.601_TT_10185','Africa.601_TT_10184','Africa.601_TT_10183','Africa.601_TT_10182','Africa.601_TT_10181']]
     teller=0
     for inputset in inputs:
-        # if inputset != inputs[-1]:
-        #     continue
+        if inputset != inputs[-1]:
+            continue
         epochs=6000
-        learning_rate=0.7
-        hidden_layers=[500,250,125,75,10]
-        result_filename="CONEresults_using_input_set_"+str(teller)+".xlsx"
-        console_log_filename="CONEconsole_log_using_input_set"+str(teller)+".txt"
-        time_spent_filename="CONEtime_spent_using_input_set"+str(teller)+".txt"
+        learning_rate=0.9
+        hidden_layers=[500,10,5]
+        result_filename="10CONEresults_using_input_set_"+str(teller)+".xlsx"
+        console_log_filename="10CONEconsole_log_using_input_set"+str(teller)+".txt"
+        time_spent_filename="10CONEtime_spent_using_input_set"+str(teller)+".txt"
         main(hidden_layers,epochs,learning_rate,result_filename,console_log_filename,time_spent_filename,output,inputset)
         teller+=1
     
+def NoGrow():
+    output=['Africa.871_XI_10207']
+    inputset=['Africa.601_XI_10114','Africa.601_UA_10176','Africa.601_TI_10199','Africa.601_TI_10200','Africa.601_TI_10179','Africa.601_TI_10179','Africa.601_TI_10178','Africa.601_PI_10177','Africa.601_PT_10163','Africa.601_PI_10170','601_TI_10172','Africa.601_TT_10189','Africa.601_TT_10188','Africa.601_TT_10187','Africa.601_TT_10186','Africa.601_TT_10185','Africa.601_TT_10184','Africa.601_TT_10183','Africa.601_TT_10182','Africa.601_TT_10181']
+    epochs=6000
+    learning_rate=0.7
+    teller=5
+    hidden_layers=[5000,100,5]
+    result_filename="11CONEresults_using_input_set_ADABOUND"+str(teller)+".xlsx"
+    console_log_filename="11CONEconsole_log_using_input_set"+str(teller)+".txt"
+    time_spent_filename="11CONEtime_spent_using_input_set"+str(teller)+".txt"
+    main(hidden_layers,epochs,learning_rate,result_filename,console_log_filename,time_spent_filename,output,inputset)
     
